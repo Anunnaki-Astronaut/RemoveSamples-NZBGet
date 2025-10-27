@@ -1,99 +1,100 @@
 {
-    "main": "main.py",
-    "name": "RemoveSamples",
-    "homepage": "https://github.com/Anunnaki-Astronaut/RemoveSamples-NZBGet",
-    "kind": "POST-PROCESSING",
-    "displayName": "Remove Samples",
-    "version": "1.0.2",
-    "author": "Anunnaki-Astronaut",
-    "license": "GNU",
-    "about": "Modern NZBGet extension for intelligent sample file detection and removal. Automatically cleans sample files/directories before Sonarr/Radarr/Lidarr/Prowlarr processing.",
-    "queueEvents": "",
-    "requirements": [
-        "This script requires Python 3.8+ to be installed on your system."
-    ],
-"description": [
-        "RemoveSamples intelligently detects and removes sample files and directories",
-        "using advanced pattern matching and configurable size thresholds.",
-        "",
-        "🎯 SETUP:",
-        "1. Settings → Categories → [Your Category] → ExtensionScripts → Add 'RemoveSamples'",
-        "2. Place RemoveSamples AFTER unpack but BEFORE media manager processing"
-    ],
-    "options": [
-        {
-            "name": "RemoveDirectories",
-            "displayName": "Remove Directories",
-            "value": "Yes",
-            "description": [
-                "Delete entire directories with sample patterns (samples/, SAMPLE/, etc.)",
-                "Recommended: Yes - removes complete sample folder structures"
-            ],
-            "select": ["Yes", "No"]
-        },
-        {
-            "name": "RemoveFiles",
-            "displayName": "Remove Files", 
-            "value": "Yes",
-            "description": [
-                "Delete individual files containing sample patterns in filename",
-                "Recommended: Yes - removes files like movie.sample.mkv"
-            ],
-            "select": ["Yes", "No"]
-        },
-{
-            "name": "Debug",
-            "displayName": "Debug",
-            "value": "No",
-            "description": [
-                "Enable detailed logging for troubleshooting and configuration testing",
-                "Set to Yes only during setup or when investigating issues"
-            ],
-            "select": ["Yes", "No"]
-        },
-{
-            "name": "VideoSizeThresholdMB",
-            "displayName": "Video Size Threshold (MB)",
-            "value": 150,
-"description": [
-                "Maximum size (MB) for video files to be considered samples",
-                "Common presets: 50 (480p samples), 100 (720p samples), 150 (1080p samples), 300 (4K samples)",
-                "Higher values = more aggressive detection (range: 1-1000)"
-            ],
-"select": [1, 1000]
-        },
-        {
-            "name": "VideoExts",
-            "displayName": "Video Extensions",
-            "value": ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob,.mpg,.mpeg,.iso",
-            "description": [
-                "Comma-separated video file extensions for size-based detection",
-                "Default covers most common formats. Add rare formats if needed."
-            ],
-            "select": []
-        },
-{
-            "name": "AudioSizeThresholdMB",
-            "displayName": "Audio Size Threshold (MB)",
-            "value": 2,
-"description": [
-                "Maximum size (MB) for audio files to be considered samples",
-                "Common presets: 1 (short clips), 2 (30s @ 320kbps), 4 (1min @ 320kbps), 8 (2min samples)",
-                "Set to 0 to disable audio size detection (range: 0-100)"
-            ],
-"select": [0, 100]
-        },
-        {
-            "name": "AudioExts",
-            "displayName": "Audio Extensions",
-            "value": ".mp3,.flac,.aac,.ogg,.wma,.m4a,.opus,.wav,.alac,.ape",
-            "description": [
-                "Comma-separated audio file extensions for size-based detection",
-                "Covers lossless (FLAC, WAV) and compressed (MP3, AAC) formats"
-            ],
-            "select": []
-        }
-    ],
-    "commands": [],
-    "taskTime": ""
+  "main": "main.py",
+  "name": "RemoveSamples",
+  "homepage": "https://github.com/Anunnaki-Astronaut/RemoveSamples-NZBGet",
+  "kind": "POST-PROCESSING",
+  "displayName": "Remove Samples",
+  "version": "1.0.3",
+  "nzbgetMinVersion": "23",
+  "author": "Anunnaki-Astronaut",
+  "license": "GPL-2.0-only",
+  "about": "Modern NZBGet extension for intelligent sample file detection and removal. Automatically cleans sample files/directories before Sonarr/Radarr/Lidarr/Prowlarr processing.",
+  "queueEvents": "",
+  "requirements": [
+    "This script requires Python 3.8+ to be installed on your system."
+  ],
+  "description": [
+    "RemoveSamples intelligently detects and removes sample files and directories",
+    "using advanced pattern matching and configurable size thresholds.",
+    "",
+    "🎯 SETUP:",
+    "1. Settings → Categories → [Your Category] → ExtensionScripts → Add 'RemoveSamples'",
+    "2. Place RemoveSamples AFTER unpack but BEFORE media manager processing"
+  ],
+  "options": [
+    {
+      "name": "RemoveDirectories",
+      "displayName": "Remove Directories",
+      "value": "Yes",
+      "description": [
+        "Delete entire directories with sample patterns (samples/, SAMPLE/, etc.)",
+        "Recommended: Yes - removes complete sample folder structures"
+      ],
+      "select": ["Yes", "No"]
+    },
+    {
+      "name": "RemoveFiles",
+      "displayName": "Remove Files",
+      "value": "Yes",
+      "description": [
+        "Delete individual files containing sample patterns in filename",
+        "Recommended: Yes - removes files like movie.sample.mkv"
+      ],
+      "select": ["Yes", "No"]
+    },
+    {
+      "name": "Debug",
+      "displayName": "Debug",
+      "value": "No",
+      "description": [
+        "Enable detailed logging for troubleshooting and configuration testing",
+        "Set to Yes only during setup or when investigating issues"
+      ],
+      "select": ["Yes", "No"]
+    },
+    {
+      "name": "VideoSizeThresholdMB",
+      "displayName": "Video Size Threshold (MB)",
+      "value": 150,
+      "description": [
+        "Maximum size (MB) for video files to be considered samples",
+        "Common presets: 50 (480p samples), 100 (720p samples), 150 (1080p samples), 300 (4K samples)",
+        "Higher values = more aggressive detection (range: 1-1000)"
+      ],
+      "select": [1, 1000]
+    },
+    {
+      "name": "VideoExts",
+      "displayName": "Video Extensions",
+      "value": ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob,.mpg,.mpeg,.iso",
+      "description": [
+        "Comma-separated video file extensions for size-based detection",
+        "Default covers most common formats. Add rare formats if needed."
+      ],
+      "select": []
+    },
+    {
+      "name": "AudioSizeThresholdMB",
+      "displayName": "Audio Size Threshold (MB)",
+      "value": 2,
+      "description": [
+        "Maximum size (MB) for audio files to be considered samples",
+        "Common presets: 1 (short clips), 2 (30s @ 320kbps), 4 (1min @ 320kbps), 8 (2min samples)",
+        "Set to 0 to disable audio size detection (range: 0-100)"
+      ],
+      "select": [0, 100]
+    },
+    {
+      "name": "AudioExts",
+      "displayName": "Audio Extensions",
+      "value": ".mp3,.flac,.aac,.ogg,.wma,.m4a,.opus,.wav,.alac,.ape",
+      "description": [
+        "Comma-separated audio file extensions for size-based detection",
+        "Covers lossless (FLAC, WAV) and compressed (MP3, AAC) formats"
+      ],
+      "select": []
+    }
+  ],
+  "commands": [],
+  "taskTime": ""
 }

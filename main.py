@@ -102,7 +102,7 @@ AUDIO_EXTS = {
 }
 
 DL_DIR = os.environ.get('NZBPP_DIRECTORY')
-DL_STATUS = os.environ.get('NZBPP_STATUS', '')
+DL_STATUS = os.environ.get('NZBPP_STATUS', '') or os.environ.get('NZBPP_TOTALSTATUS', '')
 DL_NAME = os.environ.get('NZBPP_NZBNAME', '')
 
 
