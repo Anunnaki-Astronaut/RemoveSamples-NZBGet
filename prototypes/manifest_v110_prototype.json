@@ -8,7 +8,7 @@
   "nzbgetMinVersion": "23",
   "author": "Anunnaki-Astronaut",
   "license": "GPL-2.0-only",
-  "about": "Detects and removes sample files/folders; includes an optional Test Mode and Quarantine.",
+  "about": "Detects and removes sample files/folders; includes an optional Test Mode.",
   "queueEvents": "",
   "requirements": [
     "This script requires Python 3.8+ to be installed on your system."
@@ -45,13 +45,14 @@
       "description": [
         "Safe preview. Shows what would be removed; makes no changes. Use while tuning, then turn off.",
         "Temporarily set thresholds (e.g., Video Size Threshold) so tests catch likely samples.",
-        "See results in NZBGet → Messages and in the NZB’s History log."
+        "See results in NZBGet → Messages and in the NZB’s History log.",
+        "Heads-up: Avoid combining with… Debug (On) — can produce very verbose logs."
       ],
       "select": ["Yes", "No"]
     },
     {
       "name": "BlockImportDuringTest",
-      "displayName": "Block Import (Test Mode)",
+      "displayName": "Block Import",
       "value": "No",
       "description": [
         "Use with Test Mode to prevent your media manager (e.g., Sonarr/Radarr) from importing this download.",
@@ -68,7 +69,8 @@
       "description": [
         "Advanced troubleshooting: prints per-item decision lines and configuration details.",
         "Not required for Test Mode (Test Mode already prints a summary to Messages/History).",
-        "Enable only during setup or when investigating issues; leave Off for normal use."
+        "Enable only during setup or when investigating issues; leave Off for normal use.",
+        "Heads-up: Avoid combining with… Test Mode (On) for routine use — can produce very verbose logs."
       ],
       "select": ["Yes", "No"]
     },
