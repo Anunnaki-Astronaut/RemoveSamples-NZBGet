@@ -84,6 +84,17 @@
       "select": [1, 1000]
     },
     {
+      "name": "RelativePercent",
+      "displayName": "Relative Size %",
+      "value": 8,
+      "description": [
+        "Treats a video as a sample if it is ≤ this percent of the largest video in the download.",
+        "Example: 8% of a 10 GB movie is 800 MB; 8% of a 2 GB episode is 160 MB.",
+        "Default is 8%. Set to 0 to disable relative size checks (absolute MB thresholds still apply)."
+      ],
+      "select": [0, 100]
+    },
+  {
       "name": "VideoExts",
       "displayName": "Video Extensions",
       "value": ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob,.mpg,.mpeg,.iso",
@@ -114,25 +125,14 @@
       ],
       "select": []
     },
-    {
-      "name": "RelativePercent",
-      "displayName": "Relative Size %",
-      "value": 8,
-      "description": [
-        "Treat a file as a sample if it is ≤ this percent of the largest video in the NZB folder.",
-        "Lower = stricter (catches more); Higher = keeps more extras. Start around 8%.",
-        "Heads-up: Avoid over-strict combos with very high 'Video Size Threshold (MB)'."
-      ],
-      "select": [0, 100]
-    },
-    {
+        {
       "name": "ProtectedPaths",
       "displayName": "Protected Names/Paths",
       "value": "poster.jpg,*/subs/*,*.srt",
       "description": [
-        "Never remove items matching these names or globs (comma-separated).",
-        "Examples: poster.jpg, */subs/*, *.srt",
-        "Heads-up: Protected wins over Image Samples / Junk Extras / Deny Patterns."
+        "Never remove items matching these names or glob patterns (comma-separated).",
+        "Example default: poster.jpg, */subs/*, *.srt",
+        "Heads-up: Protected paths always win over Deny Patterns and other removal logic."
       ],
       "select": []
     },
@@ -141,9 +141,9 @@
       "displayName": "Deny Patterns",
       "value": "*sample*.jpg,proof*.txt",
       "description": [
-        "Extra patterns eligible for removal when matched (comma-separated).",
-        "Examples: *sample*.jpg, proof*.txt",
-        "Heads-up: Still blocked by Protected if both match."
+        "Extra glob patterns to mark files for removal (comma-separated).",
+        "Example default: *sample*.jpg, proof*.txt",
+        "Heads-up: Protected Paths will still prevent removal if an item matches both."
       ],
       "select": []
     },
@@ -163,9 +163,9 @@
       "displayName": "Junk Extras",
       "value": "No",
       "description": [
-        "Remove common release clutter (e.g., .url, spam .txt). Conservative list.",
-        "Default: No — enable after thresholds are tuned.",
-        "Heads-up: Protected rules covering these files will prevent removal."
+        "Remove common release clutter using a built-in, conservative list.",
+        "Currently targets: *.url, *.webloc, and readme.txt.",
+        "Enable to clean up these common extra files."
       ],
       "select": ["Yes", "No"]
     },
@@ -174,9 +174,10 @@
       "displayName": "Category Thresholds",
       "value": "",
       "description": [
-        "Per-category Relative % overrides (key=value, comma-separated), e.g.: movies=8,tv=10,anime=14",
-        "Unknown categories fall back to the global Relative Size %.",
-        "Keeps a single install behaving correctly across Movies/TV/Anime."
+        "Per-category override for Relative Size %, in `category=percent` pairs (e.g., `movies=8,tv=12,anime=15`).",
+        "If blank, all categories use the global Relative Size % (default 8%).",
+        "Unknown categories also fall back to the global default.",
+        "Most users should leave this empty."
       ],
       "select": []
     },

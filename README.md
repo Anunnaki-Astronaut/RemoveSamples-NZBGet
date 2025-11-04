@@ -21,6 +21,19 @@ Removes “sample” files and sample folders **before** Sonarr/Radarr/Lidarr/Pr
 * **Remove Files:** Yes
 * **Debug:** Leave **Off** under normal use. Turn **On only** during initial setup or when investigating an issue.
 
+## What’s new in v1.1.0
+This version adds powerful new features for safer, more flexible sample detection.
+* **Test Mode:** Preview removals in the log without changing any files.
+* **Quarantine Mode:** Move samples to a `_samples_quarantine` folder for review instead of deleting them.
+* **Relative Size %:** A dynamic detection method that flags videos based on their size relative to the largest video in the download.
+* **Protected Paths & Deny Patterns:** Granular control to explicitly protect certain files (like subtitles) or to flag others for removal.
+* **And more:** Per-category overrides, image sample detection, and automatic quarantine purging.
+
+## Recommended Defaults
+The script's defaults are conservative and safe for most users.
+* **Relative Size %** is set to `8%` by default, which provides a good balance for most content. Most users can leave this and **Category Thresholds** at their defaults.
+* **Protected Paths** always win. If a file matches a protected pattern (e.g., `*.srt`), it will **never** be removed, even if it also matches a deny pattern or other sample criteria.
+
 ## Extensions order
 
 **NZBGet → Settings → Categories → Category1.Extensions**
