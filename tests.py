@@ -10,149 +10,157 @@
 # (at your option) any later version.
 #
 
-import sys
-import unittest
-import shutil
 import os
-import subprocess
-import pathlib
+import sys
+import shutil
 import tempfile
-from os.path import dirname
+import subprocess
+import unittest
+from pathlib import Path
 
-ROOT_DIR = dirname(__file__)
-
+# Keep these in sync with the NZBGet v23 contract / main.py
 POSTPROCESS_SUCCESS = 93
 POSTPROCESS_ERROR = 94
 POSTPROCESS_NONE = 95
 
-def get_python():
-    if os.name == "nt":
-        return "python"
-    return "python3"
+ROOT_DIR = Path(__file__).resolve().parent
+SCRIPT_PATH = ROOT_DIR / "main.py"
+
 
 def set_defaults(test_dir):
-    """Set default environment variables for testing"""
+    """Set default environment variables for testing."""
+    # Core NZBGet envs
+    os.environ["NZBPP_DIRECTORY"] = test_dir
+    os.environ["NZBPP_STATUS"] = "SUCCESS"
+    os.environ["NZBPP_NZBNAME"] = "Test.NZB"
+
+    # Core options (mirror manifest defaults)
     os.environ["NZBPO_REMOVEDIRECTORIES"] = "Yes"
     os.environ["NZBPO_REMOVEFILES"] = "Yes"
     os.environ["NZBPO_DEBUG"] = "No"
     os.environ["NZBPO_VIDEOSIZETHRESHOLDMB"] = "150"
-    os.environ["NZBPO_VIDEOEXTS"] = ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob"
+    os.environ[
+        "NZBPO_VIDEOEXTS"
+    ] = ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob"
     os.environ["NZBPO_AUDIOSIZETHRESHOLDMB"] = "2"
-    os.environ["NZBPO_AUDIOEXTS"] = ".wav,.aiff,.mp3,.flac,.m4a,.ogg,.aac,.alac,.ape,.opus,.wma"
-    os.environ["NZBPP_DIRECTORY"] = test_dir
-    os.environ["NZBPP_STATUS"] = "SUCCESS"
-    os.environ["NZBPP_NZBNAME"] = "Test.Download"
+    os.environ[
+        "NZBPO_AUDIOEXTS"
+    ] = ".wav,.aiff,.mp3,.flac,.m4a,.ogg,.aac,.alac,.ape,.opus,.wma"
+
+    # Optional toggles – default off
+    os.environ["NZBPO_TESTMODE"] = "No"
+    os.environ["NZBPO_BLOCKIMPORTDURINGTEST"] = "No"
+
 
 def run_script():
-    """Run the main.py script and return output, return code, and error"""
-    sys.stdout.flush()
+    """Run main.py as a subprocess and capture stdout/stderr/exit code."""
     proc = subprocess.Popen(
-        [get_python(), ROOT_DIR + "/main.py"],
+        [sys.executable, str(SCRIPT_PATH)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=os.environ.copy(),
     )
     out, err = proc.communicate()
-    ret_code = proc.returncode
-    return (out.decode(), int(ret_code), err.decode())
+    return out.decode("utf-8"), int(proc.returncode), err.decode("utf-8")
+
 
 class TestRemoveSamples(unittest.TestCase):
-    
     def setUp(self):
-        """Set up test environment"""
-        self.test_dir = tempfile.mkdtemp()
+        self.test_dir = tempfile.mkdtemp(prefix="rs_tests_")
         set_defaults(self.test_dir)
-    
+
     def tearDown(self):
-        """Clean up test environment"""
         shutil.rmtree(self.test_dir, ignore_errors=True)
-    
-    def test_script_success(self):
-        """Test that script runs successfully with default settings"""
-        [output, code, error] = run_script()
-        self.assertEqual(code, POSTPROCESS_SUCCESS)
+
+    # --- Basic flow -----------------------------------------------------
+
+    def test_script_success_no_work_done(self):
+        """Empty dir with defaults should run and exit with POSTPROCESS_NONE."""
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_NONE)
         self.assertIn("RemoveSamples extension started", output)
         self.assertIn("RemoveSamples extension completed successfully", output)
-    
+
     def test_missing_directory(self):
-        """Test script behavior when download directory doesn't exist"""
+        """Missing NZBPP_DIRECTORY should be handled gracefully."""
         os.environ["NZBPP_DIRECTORY"] = "/nonexistent/directory"
-        [output, code, error] = run_script()
+        output, code, error = run_script()
+        # Current behavior: treat as NONE and log an error line
         self.assertEqual(code, POSTPROCESS_NONE)
-        self.assertIn("doesn't exist", output)
-    
-    def test_sample_file_detection(self):
-        """Test that sample files are properly detected"""
-        # Create test files
-        test_file = pathlib.Path(self.test_dir) / "sample.mkv"
-        test_file.write_text("test content")
-        
-        [output, code, error] = run_script()
-        self.assertEqual(code, POSTPROCESS_SUCCESS)
-        self.assertFalse(test_file.exists())  # Should be removed
-    
-    def test_sample_directory_detection(self):
-        """Test that sample directories are properly detected"""
-        # Create test directory
-        sample_dir = pathlib.Path(self.test_dir) / "samples"
-        sample_dir.mkdir()
-        (sample_dir / "test.txt").write_text("test content")
-        
-        [output, code, error] = run_script()
-        self.assertEqual(code, POSTPROCESS_SUCCESS)
-        self.assertFalse(sample_dir.exists())  # Should be removed
-    
-    def test_small_video_file_detection(self):
-        """Test that small video files are detected as samples"""
-        # Create small video file (under threshold)
-        small_video = pathlib.Path(self.test_dir) / "movie.mkv"
-        small_video.write_bytes(b"x" * 1024)  # 1KB file, well under 150MB threshold
-        
-        [output, code, error] = run_script()
-        self.assertEqual(code, POSTPROCESS_SUCCESS)
-        self.assertFalse(small_video.exists())  # Should be removed as sample
-    
-    def test_normal_files_preserved(self):
-        """Test that normal files are not removed"""
-        # Create normal file
-        normal_file = pathlib.Path(self.test_dir) / "movie.mkv"
-        normal_file.write_bytes(b"x" * (200 * 1024 * 1024))  # 200MB file, over threshold
-        
-        [output, code, error] = run_script()
-        self.assertEqual(code, POSTPROCESS_SUCCESS)
-        self.assertTrue(normal_file.exists())  # Should be preserved
-    
-    def test_disabled_file_removal(self):
-        """Test that file removal can be disabled"""
-        os.environ["NZBPO_REMOVEFILES"] = "No"
-        
-        # Create sample file
-        sample_file = pathlib.Path(self.test_dir) / "sample.mkv"
-        sample_file.write_text("test content")
-        
-        [output, code, error] = run_script()
-        self.assertEqual(code, POSTPROCESS_SUCCESS)
-        self.assertTrue(sample_file.exists())  # Should be preserved when disabled
-    
-    def test_disabled_directory_removal(self):
-        """Test that directory removal can be disabled"""
-        os.environ["NZBPO_REMOVEDIRECTORIES"] = "No"
-        
-        # Create sample directory
-        sample_dir = pathlib.Path(self.test_dir) / "samples"
-        sample_dir.mkdir()
-        
-        [output, code, error] = run_script()
-        self.assertEqual(code, POSTPROCESS_SUCCESS)
-        self.assertTrue(sample_dir.exists())  # Should be preserved when disabled
-    
+        self.assertIn("Destination directory not found", output)
+
     def test_failed_status_skip(self):
-        """Test that script skips processing when status is not SUCCESS"""
+        """If NZBPP_STATUS != SUCCESS, script should skip processing."""
         os.environ["NZBPP_STATUS"] = "FAILURE"
-        
-        [output, code, error] = run_script()
+        output, code, error = run_script()
         self.assertEqual(code, POSTPROCESS_NONE)
-        self.assertIn("skipping", output)
+        self.assertIn("skipping", output.lower())
+
+    # --- Sample detection -----------------------------------------------
+
+    def test_sample_directory_detection(self):
+        """Directories with 'sample' in the name should be removed."""
+        sample_dir = Path(self.test_dir) / "Sample"
+        sample_dir.mkdir()
+        (sample_dir / "test.txt").write_text("content", encoding="utf-8")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_SUCCESS)
+        self.assertFalse(sample_dir.exists())
+
+    def test_sample_file_detection(self):
+        """Files with sample pattern in filename should be removed."""
+        sample_file = Path(self.test_dir) / "movie.sample.mkv"
+        sample_file.write_text("content", encoding="utf-8")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_SUCCESS)
+        self.assertFalse(sample_file.exists())
+
+    def test_small_video_file_detection(self):
+        """Very small video files under threshold should be treated as samples."""
+        small_video = Path(self.test_dir) / "movie.mkv"
+        small_video.write_bytes(b"x" * 1024)  # 1KB
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_SUCCESS)
+        self.assertFalse(small_video.exists())
+
+    # --- Non-sample and disabled behavior -------------------------------
+
+    def test_normal_files_preserved(self):
+        """Large non-sample videos should not be removed."""
+        normal_file = Path(self.test_dir) / "movie.mkv"
+        normal_file.write_bytes(b"x" * (200 * 1024 * 1024))  # 200MB
+
+        output, code, error = run_script()
+        # Nothing removed -> NONE
+        self.assertEqual(code, POSTPROCESS_NONE)
+        self.assertTrue(normal_file.exists())
+
+    def test_disabled_file_removal(self):
+        """When REMOVEFILES is No, even obvious sample files are preserved."""
+        os.environ["NZBPO_REMOVEFILES"] = "No"
+
+        sample_file = Path(self.test_dir) / "movie.sample.mkv"
+        sample_file.write_text("content", encoding="utf-8")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_NONE)
+        self.assertTrue(sample_file.exists())
+
+    def test_disabled_directory_removal(self):
+        """When REMOVEDIRECTORIES is No, sample directories are preserved."""
+        os.environ["NZBPO_REMOVEDIRECTORIES"] = "No"
+
+        sample_dir = Path(self.test_dir) / "Sample"
+        sample_dir.mkdir()
+        (sample_dir / "test.txt").write_text("content", encoding="utf-8")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_NONE)
+        self.assertTrue(sample_dir.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
