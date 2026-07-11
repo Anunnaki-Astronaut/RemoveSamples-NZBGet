@@ -1,6 +1,6 @@
-# RemoveSamples-NZBGet v1.1.1 — Draft GitHub Release Notes
+# RemoveSamples-NZBGet v1.1.1
 
-> **Release status: controlled Test Mode, Block Import, and Quarantine Mode observations passed on the active NZBGet system on 2026-07-11. The final Block Import logging refinement passed the target-container disposable harness 8/8, was deployed with a verified rollback backup, and passed active-container hash, JSON, and Python syntax verification. GitHub publication remains pending.**
+> **Release validation complete:** controlled Test Mode, Block Import, and Quarantine Mode observations passed on the active NZBGet system on 2026-07-11. The final Block Import logging refinement passed the target-container disposable harness 8/8, was deployed with a verified rollback backup, and passed active-container hash, JSON, and Python syntax verification.
 
 ## Safety hardening release
 
@@ -52,7 +52,7 @@ v1.1.1 fixes several destructive-behavior edge cases found during a Graphify-ass
 - [x] Final `main.py`, `manifest.json`, and 8-check harness hashes were verified in staging and the active host deployment.
 - [x] Final active-container hashes, manifest JSON, and Python syntax were verified read-only.
 - [x] Final Git diff reviewed with no safety blocker or accidental artifacts.
-- [ ] Create the v1.1.1 GitHub release.
+
 
 The disposable harness creates and alters files only under `/data/usenet/complete/_ka_removesamples_v1111_smoke`, refuses to reuse that root, and preserves it for inspection. See `tools/unraid_smoke_test_v1111.py` for the generated fixtures and assertions.
 
