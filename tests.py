@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 #
-# Tests for RemoveSamples Extension (v1.1.0 semantics)
+# Tests for RemoveSamples Extension (v1.1.1 semantics)
 #
 # - Uses POSTPROCESS_SUCCESS (93) for runs that actually delete something
 # - Uses POSTPROCESS_NONE    (95) for runs that do no destructive work
 #
 
 import os
-import sys
 import shutil
-import tempfile
 import subprocess
+import sys
+import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -35,16 +36,24 @@ def set_defaults(test_dir: str) -> None:
     os.environ["NZBPO_DEBUG"] = "No"
     os.environ["NZBPO_VIDEOSIZETHRESHOLDMB"] = "150"
     os.environ["NZBPO_VIDEOEXTS"] = (
-        ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob"
+        ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob,.mpg,.mpeg,.iso"
     )
     os.environ["NZBPO_AUDIOSIZETHRESHOLDMB"] = "2"
     os.environ["NZBPO_AUDIOEXTS"] = (
-        ".wav,.aiff,.mp3,.flac,.m4a,.ogg,.aac,.alac,.ape,.opus,.wma"
+        ".mp3,.flac,.aac,.ogg,.wma,.m4a,.opus,.wav,.alac,.ape"
     )
 
     # Optional toggles default off
     os.environ["NZBPO_TESTMODE"] = "No"
     os.environ["NZBPO_BLOCKIMPORTDURINGTEST"] = "No"
+    os.environ["NZBPO_RELATIVEPERCENT"] = "8"
+    os.environ["NZBPO_PROTECTEDPATHS"] = ""
+    os.environ["NZBPO_DENYPATTERNS"] = ""
+    os.environ["NZBPO_IMAGESAMPLES"] = "No"
+    os.environ["NZBPO_JUNKEXTRAS"] = "No"
+    os.environ["NZBPO_CATEGORYTHRESHOLDS"] = ""
+    os.environ["NZBPO_QUARANTINEMODE"] = "No"
+    os.environ["NZBPO_QUARANTINEMAXAGEDAYS"] = "0"
 
 
 def run_script():
@@ -74,8 +83,11 @@ class TestRemoveSamples(unittest.TestCase):
         output, code, error = run_script()
         self.assertEqual(code, POSTPROCESS_NONE)
         self.assertIn("RemoveSamples extension started", output)
-        # v1.1.0 uses a summary line instead of "completed successfully"
+        # v1.1.1 uses a concise, explicit summary line.
         self.assertIn("Summary: removed 0 files / 0 dirs", output)
+        self.assertIn("FileCandidates=0 DirCandidates=0", output)
+        self.assertIn("VideoMaxMB=150", output)
+        self.assertNotIn("VideoMB>=", output)
 
     def test_missing_directory(self):
         """Missing NZBPP_DIRECTORY should be handled gracefully."""
@@ -91,6 +103,28 @@ class TestRemoveSamples(unittest.TestCase):
         output, code, error = run_script()
         self.assertEqual(code, POSTPROCESS_NONE)
         self.assertIn("skipping", output.lower())
+
+    def test_block_import_logs_preview_and_summary_before_exit(self):
+        """Block Import must preserve the complete Test Mode preview before exit 94."""
+        os.environ["NZBPO_TESTMODE"] = "Yes"
+        os.environ["NZBPO_BLOCKIMPORTDURINGTEST"] = "Yes"
+
+        sample_dir = Path(self.test_dir) / "Sample"
+        sample_dir.mkdir()
+        sample_file = sample_dir / "sample-episode.mkv"
+        sample_file.write_bytes(b"x" * 1024)
+
+        output, code, error = run_script()
+
+        self.assertEqual(code, POSTPROCESS_ERROR)
+        self.assertTrue(sample_file.exists())
+        self.assertIn("[TEST] Would remove directory: Sample", output)
+        self.assertIn("[TEST] Would remove file: Sample/sample-episode.mkv", output)
+        self.assertIn("Summary: removed 0 files / 0 dirs", output)
+        self.assertIn("FileCandidates=1 DirCandidates=1", output)
+        block_message = "BlockImportDuringTest=ON with candidates"
+        self.assertIn(block_message, output)
+        self.assertLess(output.index("Summary:"), output.index(block_message))
 
     # ---- Sample detection ----------------------------------------------
 
@@ -165,6 +199,92 @@ class TestRemoveSamples(unittest.TestCase):
         output, code, error = run_script()
         self.assertEqual(code, POSTPROCESS_NONE)
         self.assertTrue(sample_dir.exists())
+
+    # ---- P0 safety regressions -----------------------------------------
+
+    def test_test_mode_never_purges_quarantine(self):
+        """Test Mode must not purge old quarantined files."""
+        os.environ["NZBPO_TESTMODE"] = "Yes"
+        os.environ["NZBPO_QUARANTINEMODE"] = "Yes"
+        os.environ["NZBPO_QUARANTINEMAXAGEDAYS"] = "7"
+        os.environ["NZBPO_REMOVEFILES"] = "No"
+        os.environ["NZBPO_REMOVEDIRECTORIES"] = "No"
+
+        quarantine_dir = Path(self.test_dir) / "_samples_quarantine"
+        quarantine_dir.mkdir()
+        old_file = quarantine_dir / "old.txt"
+        old_file.write_text("must survive", encoding="utf-8")
+        old_time = time.time() - (10 * 86400)
+        os.utime(old_file, (old_time, old_time))
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_NONE)
+        self.assertTrue(old_file.exists())
+        self.assertIn("Mode: TEST", output)
+
+    def test_existing_quarantine_is_not_reprocessed(self):
+        """Existing quarantine content must survive another quarantine run."""
+        os.environ["NZBPO_QUARANTINEMODE"] = "Yes"
+
+        quarantine_dir = Path(self.test_dir) / "_samples_quarantine"
+        quarantine_dir.mkdir()
+        old_file = quarantine_dir / "old.sample.mkv"
+        old_file.write_bytes(b"x")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_NONE)
+        self.assertTrue(quarantine_dir.exists())
+        self.assertTrue(old_file.exists())
+
+    def test_protected_descendant_blocks_sample_directory_removal(self):
+        """Protected files inside a sample directory must prevent whole-dir removal."""
+        os.environ["NZBPO_PROTECTEDPATHS"] = "*.srt"
+
+        sample_dir = Path(self.test_dir) / "Sample"
+        sample_dir.mkdir()
+        protected_file = sample_dir / "keep.srt"
+        protected_file.write_text("keep", encoding="utf-8")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_NONE)
+        self.assertTrue(sample_dir.exists())
+        self.assertTrue(protected_file.exists())
+
+    def test_relative_percent_zero_disables_relative_detection(self):
+        """RelativePercent=0 must not select a tiny video by relative size."""
+        os.environ["NZBPO_VIDEOSIZETHRESHOLDMB"] = "0"
+        os.environ["NZBPO_RELATIVEPERCENT"] = "0"
+
+        tiny_video = Path(self.test_dir) / "tiny.mkv"
+        tiny_video.write_bytes(b"x")
+        large_video = Path(self.test_dir) / "feature.mkv"
+        with large_video.open("wb") as handle:
+            handle.seek((1024 * 1024) - 1)
+            handle.write(b"\0")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_NONE)
+        self.assertTrue(tiny_video.exists())
+        self.assertTrue(large_video.exists())
+
+    def test_quarantine_collision_keeps_source_and_existing_copy(self):
+        """A quarantine collision must not overwrite or delete either file."""
+        os.environ["NZBPO_QUARANTINEMODE"] = "Yes"
+
+        sample_dir = Path(self.test_dir) / "Sample"
+        sample_dir.mkdir()
+        source_file = sample_dir / "keep.txt"
+        source_file.write_text("source", encoding="utf-8")
+        existing_copy = Path(self.test_dir) / "_samples_quarantine" / "Sample" / "keep.txt"
+        existing_copy.parent.mkdir(parents=True)
+        existing_copy.write_text("existing", encoding="utf-8")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_ERROR)
+        self.assertTrue(source_file.exists())
+        self.assertEqual(source_file.read_text(encoding="utf-8"), "source")
+        self.assertTrue(existing_copy.exists())
+        self.assertEqual(existing_copy.read_text(encoding="utf-8"), "existing")
 
 
 if __name__ == "__main__":

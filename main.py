@@ -251,6 +251,7 @@ def main():
     file_candidates = []
     dir_candidates = []
     errors = 0
+    quar_dir = DEST_DIR / "_samples_quarantine"
 
     def is_video(p: Path) -> bool: return p.suffix.lower() in VIDEO_EXTS
     def is_audio(p: Path) -> bool: return p.suffix.lower() in AUDIO_EXTS
@@ -260,6 +261,9 @@ def main():
     all_dirs = []
     for p in DEST_DIR.rglob("*"):
         try:
+            if p == quar_dir or quar_dir in p.parents:
+                debug(f"Skip quarantine path: {p}")
+                continue
             if p.is_symlink():
                 debug(f"Skip symlink: {p}")
                 continue
@@ -275,7 +279,7 @@ def main():
     dirs_considered = len(all_dirs)
 
     largest_video_bytes = 0
-    if eff_relative_percent >= 0:
+    if eff_relative_percent > 0:
         for f in all_files:
             if is_video(f):
                 try:
@@ -285,11 +289,24 @@ def main():
                 except OSError:
                     pass
 
+    def has_protected_descendant(directory: Path) -> bool:
+        """Return True when a candidate directory contains protected content."""
+        try:
+            for child in directory.rglob("*"):
+                if child.is_symlink():
+                    continue
+                if _matches_any(DEST_DIR, child, PROTECTED_PATHS):
+                    return True
+        except OSError:
+            # A directory we cannot inspect is not safe to remove wholesale.
+            return True
+        return False
+
     # Directories by name pattern
     for d in all_dirs:
         try:
             if SAMPLE_NAME_RE_DIR.search(d.name):
-                if _matches_any(DEST_DIR, d, PROTECTED_PATHS):
+                if _matches_any(DEST_DIR, d, PROTECTED_PATHS) or has_protected_descendant(d):
                     debug(f"Protected directory: {d}")
                 else:
                     dir_candidates.append(d)
@@ -311,7 +328,7 @@ def main():
             small_audio = is_audio(f) and (AUD_LIMIT > 0 and mb < float(AUD_LIMIT))
 
             rel_hit = False
-            if is_video(f) and eff_relative_percent >= 0 and largest_video_bytes > 0:
+            if is_video(f) and eff_relative_percent > 0 and largest_video_bytes > 0:
                 try:
                     pct = int(round((f.stat().st_size / largest_video_bytes) * 100))
                     rel_hit = (pct <= eff_relative_percent)
@@ -330,19 +347,14 @@ def main():
             errors += 1
             error(f"File scan error at {f}: {ex}")
 
-    if TEST_MODE and BLOCK_IMPORT_DURING_TEST and (file_candidates or dir_candidates):
-        info("BlockImportDuringTest=ON with candidates → reporting 94 to prevent import (no deletions performed).")
-        info("Summary: 0 removed (blocked during Test). Mode: TEST")
-        sys.exit(POSTPROCESS_ERROR)
-
     # ---------- Act ----------
     removed_files = 0
     removed_dirs = 0
     removed_mb_total = 0.0
-    quar_dir = DEST_DIR / "_samples_quarantine"
-
     def _safe_move(src: Path):
         dst = quar_dir / src.resolve().relative_to(DEST_DIR)
+        if dst.exists():
+            raise FileExistsError(f"Quarantine destination already exists: {dst}")
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src), str(dst))
 
@@ -354,22 +366,28 @@ def main():
                 if TEST_MODE:
                     info(f"[TEST] Would remove directory: {rel}")
                 elif QUARANTINE_MODE:
-                    moved_any = False
+                    move_failed = False
                     for p in d.rglob("*"):
                         if p.is_file():
                             try:
                                 _safe_move(p)
-                                moved_any = True
                             except Exception as ex:
-                                errors += 1; error(f"Quarantine move failed {p}: {ex}")
-                    shutil.rmtree(d, ignore_errors=True)
-                    if moved_any: removed_dirs += 1; info(f"[QUARANTINE] Directory contents moved: {rel}")
+                                errors += 1
+                                move_failed = True
+                                error(f"Quarantine move failed {p}: {ex}")
+                    if move_failed:
+                        info(f"[QUARANTINE] Retained directory after move failure: {rel}")
+                    else:
+                        shutil.rmtree(d)
+                        removed_dirs += 1
+                        info(f"[QUARANTINE] Directory contents moved: {rel}")
                 else:
                     shutil.rmtree(d)
                     removed_dirs += 1
                     info(f"Removed directory: {rel}")
             except Exception as ex:
-                errors += 1; error(f"Failed to process directory: {d} - {ex}")
+                errors += 1
+                error(f"Failed to process directory: {d} - {ex}")
     else:
         debug("Configured to keep directories (NZBPO_REMOVEDIRECTORIES=No)")
 
@@ -386,14 +404,17 @@ def main():
                     info(f"[TEST] Would remove file: {rel} ({mb:.1f} MB)")
                 elif QUARANTINE_MODE:
                     _safe_move(f)
-                    removed_files += 1; removed_mb_total += mb
+                    removed_files += 1
+                    removed_mb_total += mb
                     info(f"[QUARANTINE] {rel} ({mb:.1f} MB)")
                 else:
                     f.unlink()
-                    removed_files += 1; removed_mb_total += mb
+                    removed_files += 1
+                    removed_mb_total += mb
                     info(f"Removed file: {rel} ({mb:.1f} MB)")
             except Exception as ex:
-                errors += 1; error(f"Failed to process file: {f} - {ex}")
+                errors += 1
+                error(f"Failed to process file: {f} - {ex}")
     else:
         debug("Configured to keep files (NZBPO_REMOVEFILES=No)")
 
@@ -402,18 +423,32 @@ def main():
         f"Summary: removed {removed_files} files / {removed_dirs} dirs "
         f"({removed_mb_total:.1f} MB). Mode: {mode}. "
         f"FilesChecked={files_considered} DirsChecked={dirs_considered} "
-        f"Candidates={len(file_candidates)+len(dir_candidates)} "
-        f"Rel%={'disabled' if eff_relative_percent < 0 else eff_relative_percent} "
-        f"VideoMB>={VID_LIMIT}"
+        f"FileCandidates={len(file_candidates)} DirCandidates={len(dir_candidates)} "
+        f"Rel%={'disabled' if eff_relative_percent <= 0 else eff_relative_percent} "
+        f"VideoMaxMB={VID_LIMIT}"
     )
 
-    if QUARANTINE_MODE and QUARANTINE_MAX_AGE_DAYS > 0 and quar_dir.exists():
+    if TEST_MODE and BLOCK_IMPORT_DURING_TEST and (file_candidates or dir_candidates):
+        info(
+            "BlockImportDuringTest=ON with candidates → preview complete; "
+            "reporting 94 to prevent import (no deletions performed)."
+        )
+        sys.exit(POSTPROCESS_ERROR)
+
+    if (
+        QUARANTINE_MODE
+        and not TEST_MODE
+        and (REMOVE_FILES or REMOVE_DIRS)
+        and QUARANTINE_MAX_AGE_DAYS > 0
+        and quar_dir.exists()
+    ):
         cutoff = time.time() - (QUARANTINE_MAX_AGE_DAYS * 86400)
         try:
             for p in quar_dir.rglob("*"):
                 try:
                     if p.is_file() and p.stat().st_mtime < cutoff:
-                        p.unlink(); debug(f"Purged old quarantine file: {p.name}")
+                        p.unlink()
+                        debug(f"Purged old quarantine file: {p.name}")
                 except Exception as ex:
                     error(f"Quarantine purge failed at {p}: {ex}")
             # Clean up empty subdirs
