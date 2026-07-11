@@ -4,7 +4,7 @@
 
 ## Safety hardening release
 
-v1.1.1 fixes several destructive-behavior edge cases found during a Graphify-assisted code and safety review.
+v1.1.1 fixes several destructive-behavior edge cases found during a automated code and safety review.
 
 ### Fixed
 
@@ -29,7 +29,7 @@ v1.1.1 fixes several destructive-behavior edge cases found during a Graphify-ass
 - Added regression coverage for every fixed safety case above.
 - `ruff check main.py tests.py tools/unraid_smoke_test_v1111.py` passed.
 - `manifest.json` validation and Python AST parsing passed.
-- Graphify graph rebuild and health checks passed.
+- automated analysis graph rebuild and health checks passed.
 - Bandit reported no medium- or high-severity findings; two existing low-severity broad-exception findings remain for later hardening.
 - The target NZBGet Docker container completed the disposable staging harness with **7/7 checks passed** against the staged v1.1.1 `main.py`.
 - The active `/config/scripts/RemoveSamples` deployment was hash-verified in the target container, its manifest parsed successfully, and it reported version **1.1.1**.
@@ -39,7 +39,7 @@ v1.1.1 fixes several destructive-behavior edge cases found during a Graphify-ass
 
 - 16/16 Python regression tests passed.
 - The final local disposable integration harness passed **8/8**, including ordered Block Import preview output before exit code 94.
-- Ruff, manifest JSON validation, Python compilation, Git diff checks, and the Graphify update passed.
+- Ruff, manifest JSON validation, Python compilation, Git diff checks, and the automated analysis update passed.
 - A controlled real NZBGet Test Mode run detected one 0.5 MB sample video and its `Sample` directory, reported `FileCandidates=1 DirCandidates=1`, and logged zero removals. NZBGet labeled the exit-95 result `skipped`, which is expected when Test Mode performs no destructive work. Sonarr subsequently removed the completed release through download-client cleanup; the user did not manually delete the History entry. Official Sonarr documentation confirms that `Remove Completed` can remove leftover files after import, and that `Remove Failed` can clear downloaded files after a failure. Because Block Import reports exit code 94, it prevents import but does not guarantee folder preservation when `Remove Failed` is enabled.
 - A second controlled real run used Test Mode with Block Import enabled and Sonarr `Remove Failed` temporarily disabled. A FERENGI release containing a nested `Sample` directory triggered exit code 94 and the expected NZBGet `PP-FAILURE`; Sonarr did not import it, while the completed folder, approximately 1.7 GB main video, nested `Sample` directory, and approximately 23 MB sample video remained available for inspection. This confirms Block Import behavior and Test Mode non-deletion under the documented media-manager configuration.
 - The same retained FERENGI release was then selected with NZBGet `Post-Process Again` under `Test Mode=No`, `Block Import=No`, `Quarantine Mode=Yes`, and zero-day automatic purge. RemoveSamples logged `[QUARANTINE] Directory contents moved`, reported `removed 0 files / 1 dirs`, `FileCandidates=1`, `DirCandidates=1`, `Mode: LIVE+QUARANTINE`, and completed successfully. NZBGet History changed from `PP-FAILURE` to `SUCCESS`; screenshots confirmed the approximately 23 MB sample under `_samples_quarantine/.../Sample/` while the separate main release folder remained. This completes the controlled real-world Quarantine observation.
@@ -54,7 +54,7 @@ v1.1.1 fixes several destructive-behavior edge cases found during a Graphify-ass
 - [x] Final Git diff reviewed with no safety blocker or accidental artifacts.
 
 
-The disposable harness creates and alters files only under `/data/usenet/complete/_ka_removesamples_v1111_smoke`, refuses to reuse that root, and preserves it for inspection. See `tools/unraid_smoke_test_v1111.py` for the generated fixtures and assertions.
+The disposable harness creates and alters files only under `/data/usenet/complete/_temp_removesamples_v1111_smoke`, refuses to reuse that root, and preserves it for inspection. See `tools/unraid_smoke_test_v1111.py` for the generated fixtures and assertions.
 
 ### Upgrade notes
 
@@ -68,6 +68,6 @@ The disposable harness creates and alters files only under `/data/usenet/complet
 
 - Local code review and isolated temporary-directory probes
 - Automated Python regression suite
-- Graphify AST relationship map
+- automated analysis AST relationship map
 - NZBGet v23+ manifest contract validation
 - Target LinuxServer NZBGet container staging validation and active deployment hash/manifest verification
