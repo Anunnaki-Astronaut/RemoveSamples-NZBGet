@@ -1,0 +1,4 @@
+# Keep the codebase graph focused on the extension and its project documents.
+# The project-local Graphify skill is tooling metadata, not application context.
+/.hermes/
+/graphify-out/

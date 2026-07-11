@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.1
+
+### Safety fixes
+*   **Test Mode**: Prevented quarantine expiration and cleanup from modifying files during a dry run.
+*   **Quarantine**: Excluded `_samples_quarantine` from scanning, prevented destination overwrites, and retained source directories when a quarantine move fails.
+*   **Protected Paths**: Candidate directories containing protected descendants are now preserved.
+*   **Relative Size %**: A value of `0` now disables relative-size detection as documented.
+
 ## v1.1.0
 
 This release introduces several powerful new features for more flexible and safer sample detection, along with a new Test Mode for previewing changes.

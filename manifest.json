@@ -4,7 +4,7 @@
   "homepage": "https://github.com/Anunnaki-Astronaut/RemoveSamples-NZBGet",
   "kind": "POST-PROCESSING",
   "displayName": "Remove Samples",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "nzbgetMinVersion": "23",
   "author": "Anunnaki-Astronaut",
   "license": "GPL-2.0-only",
