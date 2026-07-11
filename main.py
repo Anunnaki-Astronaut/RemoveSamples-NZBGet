@@ -347,11 +347,6 @@ def main():
             errors += 1
             error(f"File scan error at {f}: {ex}")
 
-    if TEST_MODE and BLOCK_IMPORT_DURING_TEST and (file_candidates or dir_candidates):
-        info("BlockImportDuringTest=ON with candidates → reporting 94 to prevent import (no deletions performed).")
-        info("Summary: 0 removed (blocked during Test). Mode: TEST")
-        sys.exit(POSTPROCESS_ERROR)
-
     # ---------- Act ----------
     removed_files = 0
     removed_dirs = 0
@@ -428,10 +423,17 @@ def main():
         f"Summary: removed {removed_files} files / {removed_dirs} dirs "
         f"({removed_mb_total:.1f} MB). Mode: {mode}. "
         f"FilesChecked={files_considered} DirsChecked={dirs_considered} "
-        f"Candidates={len(file_candidates)+len(dir_candidates)} "
+        f"FileCandidates={len(file_candidates)} DirCandidates={len(dir_candidates)} "
         f"Rel%={'disabled' if eff_relative_percent <= 0 else eff_relative_percent} "
-        f"VideoMB>={VID_LIMIT}"
+        f"VideoMaxMB={VID_LIMIT}"
     )
+
+    if TEST_MODE and BLOCK_IMPORT_DURING_TEST and (file_candidates or dir_candidates):
+        info(
+            "BlockImportDuringTest=ON with candidates → preview complete; "
+            "reporting 94 to prevent import (no deletions performed)."
+        )
+        sys.exit(POSTPROCESS_ERROR)
 
     if (
         QUARANTINE_MODE

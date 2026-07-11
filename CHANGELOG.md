@@ -8,6 +8,12 @@
 *   **Protected Paths**: Candidate directories containing protected descendants are now preserved.
 *   **Relative Size %**: A value of `0` now disables relative-size detection as documented.
 
+### Clarity improvements
+*   **Extension order**: Documented the canonical `Completion → PasswordDetector → ExtendedUnpacker → RemoveSamples → Clean` category order and category-override behavior.
+*   **Safety wording**: Clarified live deletion, Test Mode versus Quarantine Mode, and the conditions under which Quarantine Max Age applies.
+*   **Summary output**: Replaced the misleading `VideoMB>=` label with `VideoMaxMB` and split file and directory candidate counts.
+*   **Block Import preview**: Test Mode now prints every enabled `[TEST] Would remove...` action and the normal candidate summary before Block Import returns exit code 94.
+
 ## v1.1.0
 
 This release introduces several powerful new features for more flexible and safer sample detection, along with a new Test Mode for previewing changes.

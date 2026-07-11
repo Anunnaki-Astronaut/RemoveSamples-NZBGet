@@ -15,7 +15,8 @@
   ],
   "description": [
     "Remove Samples identifies and removes sample files and directories using name/size heuristics and configurable thresholds.",
-    "SETUP: Settings → Categories → [Your Category] → ExtensionScripts → Add 'RemoveSamples'. Place it AFTER unpack and BEFORE your media manager."
+    "SETUP: Add 'RemoveSamples' to each NZBGet category after ExtendedUnpacker/unpacking and before Clean or downstream media import.",
+    "SAFETY: With Test Mode=No and Quarantine Mode=No, matching files and directories are permanently deleted."
   ],
   "options": [
     {
@@ -43,8 +44,13 @@
       "displayName": "Test Mode",
       "value": "No",
       "description": [
-        "Safe preview. Shows what would be removed; makes no changes. Use while tuning, then turn off.",
-        "Temporarily set thresholds (e.g., Video Size Threshold) so tests catch likely samples.",
+        "Safe preview: RemoveSamples only reports what it would remove; RemoveSamples itself does not delete or move files in Test Mode.",
+        "IMPORTANT: Sonarr/Radarr may still delete the completed download after importing it when Download Client → Completed Download Handling → Remove Completed is enabled.",
+        "Block Import (Test Mode) prevents import by reporting a post-processing failure, but Sonarr/Radarr may then delete the files through Failed Download Handling → Remove Failed.",
+        "To preserve the completed folder for inspection, use an unmonitored category, pause the media manager, or temporarily disable its Remove Failed cleanup.",
+        "Quarantine Mode is ignored while Test Mode is Yes. Turn Test Mode off only after reviewing the results.",
+        "Start with your current thresholds. Change one setting at a time only if the preview misses or incorrectly matches samples.",
+        "NZBGet may show this run as 'skipped' because no files were changed. That is expected; confirm the run using the 'Mode: TEST' summary line.",
         "See results in NZBGet → Messages and in the NZB’s History log."
       ],
       "select": ["Yes", "No"]
@@ -55,9 +61,11 @@
       "value": "No",
       "description": [
         "Use with Test Mode to prevent your media manager (e.g., Sonarr/Radarr) from importing this download.",
-        "No files are deleted; this helps keep test runs out of your library.",
-        "Depending on manager settings, the release may be marked failed/blacklisted.",
-        "Recommended: Enable only for specific test cases, then turn off."
+        "RemoveSamples does not delete files in this mode, but it reports post-processing failure code 94 to block import.",
+        "For enabled removal types, the complete Test Mode preview and candidate summary are printed before the failure is reported.",
+        "WARNING: If the media manager's Failed Download Handling → Remove Failed option is enabled, it may remove the failed download and clear its files. Block Import does not guarantee folder preservation.",
+        "The manager may also mark/blocklist the release or search for a replacement, depending on its failed-download settings.",
+        "Enable only for a controlled test, then turn it off."
       ],
       "select": ["Yes", "No"]
     },
@@ -197,8 +205,9 @@
       "displayName": "Quarantine Max Age (days)",
       "value": 7,
       "description": [
-        "If > 0, purge files in '_samples_quarantine' older than N days on each run.",
-        "Set to 0 to disable auto-purge."
+        "Applies only when Quarantine Mode=Yes and Test Mode=No.",
+        "Delete files in '_samples_quarantine' after they are older than this many days.",
+        "Set to 0 to keep quarantined files until you remove them manually."
       ],
       "select": [0, 365]
     }

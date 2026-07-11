@@ -57,7 +57,8 @@ Scene releases often include short sample clips, promo images, and other junk al
 
 1. Find **Remove Samples** in the list.
 2. Click the download/install icon.
-3. That’s it.
+3. Open **Settings → Categories** and add **RemoveSamples** after **ExtendedUnpacker** and before **Clean** in each category that should use it.
+4. For the first controlled run, set **Test Mode = Yes** and review the result before allowing live deletion or quarantine.
 
 ---
 
@@ -68,9 +69,9 @@ Scene releases often include short sample clips, promo images, and other junk al
 For most users, the defaults are a safe starting point:
 
 * **Video Size Threshold (MB):** `150`
-  Small video files under this size are considered candidates for sample detection.
+  Video files below this size are considered candidates for sample detection when there is no explicit name match.
 * **Audio Size Threshold (MB):** `2`
-  Small audio files (e.g., preview tracks) are treated as samples.
+  Audio files below this size (for example, preview tracks) are considered sample candidates when there is no explicit name match.
 * **Remove Directories:** `Yes`
   Removes entire folders that look like sample directories.
 * **Remove Files:** `Yes`
@@ -81,6 +82,7 @@ For most users, the defaults are a safe starting point:
 ### Recommended defaults & safety notes
 
 * Start with the bundled defaults; they are intentionally conservative.
+* **Live deletion warning:** When **Test Mode = No** and **Quarantine Mode = No**, matching files and directories are permanently deleted.
 * **Relative Size %** defaults to **8%**, which provides a good balance for most content. Most users can leave this and **Category Thresholds** at their defaults.
 * **Protected Paths** always win: if a file matches a protected pattern (for example `*.srt` for subtitles), it will **never** be removed, even if it also looks like a sample.
 * When experimenting with new thresholds or patterns, enable **Test Mode** first so you can review log output before allowing deletions or quarantine moves.
@@ -97,16 +99,18 @@ Place **RemoveSamples** **after** unpacking and **before** any final cleanup or 
 
 1. **Completion** – Verifies download completeness before processing
 2. **PasswordDetector** – Detects password-protected archives early
-3. **FakeDetector** – Flags fake/corrupted releases
-4. **ExtendedUnpacker** – Extracts nested zip/rar archives
-5. **RemoveSamples** – Removes sample files/folders **after unpack**
-6. **Clean** – Final tidy-up
+3. **ExtendedUnpacker** – Extracts nested zip/rar archives
+4. **RemoveSamples** – Removes sample files/folders **after unpack**
+5. **Clean** – Final tidy-up
+
+Optional detection scripts such as **FakeDetector** can run before **ExtendedUnpacker** when installed.
 
 **Why order matters**
 
 * Remove Samples runs **after unpack**, so it can see real files.
 * It runs **before Clean**, so samples are removed before final cleanup.
 * Upstream detection scripts run first to catch bad releases early.
+* A non-empty category Extensions list overrides the global Extensions list, so verify this order in every category that uses RemoveSamples.
 
 ---
 
@@ -128,6 +132,44 @@ Place **RemoveSamples** **after** unpacking and **before** any final cleanup or 
 
 * Turn **Debug = Yes** **by itself** (with Test Mode left at `No`) when you need deeper, per-item decision details to understand *why* something was or wasn’t treated as a sample.
 * After troubleshooting, set **Debug = No** again for normal operation.
+
+---
+
+## Why your files may "disappear" after a Test Mode run (read this first)
+
+A common point of confusion: after a Test Mode run, the sample folder is still on disk — but it may later vanish because a media manager removed the completed download after import. RemoveSamples did not delete it.
+
+**How Test Mode actually behaves**
+
+* Test Mode only logs what *would* be removed. It performs **no deletions and no moves**.
+* The summary line reports `Mode: TEST` and `removed 0 files / 0 dirs`.
+* NZBGet may display the post-process result as **"skipped"**. That label means the script exited with no destructive action (exit code 95). It does **not** mean the script failed to run. Confirm the run using the `Mode: TEST` summary line and the `[TEST] Would remove ...` entries.
+
+**What can remove the files instead (it is not RemoveSamples in Test Mode)**
+
+| Action / setting | Removes sample/media files? | Notes |
+|---|---|---|
+| RemoveSamples **Test Mode** | No | Logs only. Safe preview by design. |
+| RemoveSamples **Live deletion** (Test Mode=No, Quarantine Mode=No) | Yes | Permanent. Intended behavior, clearly labeled in the UI. |
+| RemoveSamples **Quarantine Mode** | Moves only | Sample is relocated to `_samples_quarantine`, not deleted. |
+| **Sonarr/Radarr/Prowlarr "Remove Completed Downloads"** | **Yes, after import** | The media manager imports the episode, then asks NZBGet to delete the completed release (including any sample or quarantine folder). This is the usual cause of "my sample vanished." |
+| `UnpackCleanupDisk` (Unpack page) | Only the `.rar`/`.r##` archives | Leave this **enabled**; it does not touch extracted video/samples. |
+| `NzbCleanupDisk` | Only the source `.nzb` metadata file | Does not touch media. |
+| `KeepHistory` | Only the history *record* after N days | Does not delete files on its own. |
+
+**Why a manual download can still be removed**
+
+If your media manager monitors the same NZBGet category you used (for example, Sonarr monitoring category `tv`), it will pick up a manually added download in that category, import it, and then remove the completed folder via "Remove Completed Downloads." The download does not have to come from Sonarr — the category match is what triggers it.
+
+**Safe workflow for observing Test Mode or Quarantine results**
+
+1. Run Test Mode and review **NZBGet → Messages**.
+2. Choose the observation behavior deliberately:
+   * **Block Import (Test Mode) = Yes** prevents Sonarr/Radarr import by reporting failure code 94, but it does **not** guarantee that the folder survives. If the manager's **Failed Download Handling → Remove Failed** option is enabled, it may remove the failed download and clear its files; it may also blocklist or replace the release.
+   * To preserve the folder, use a category the media manager does not monitor, pause the media manager, or temporarily disable its **Remove Failed** cleanup.
+   * Disabling only **Remove Completed** is not enough when Block Import is enabled, because the run is reported as failed rather than completed.
+3. Inspect the completed-download folder (or `_samples_quarantine`) before any media-manager cleanup occurs.
+4. Only switch to Live deletion or Quarantine Mode once the Test Mode preview matches your expectation.
 
 ---
 

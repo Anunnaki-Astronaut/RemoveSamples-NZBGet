@@ -34,9 +34,9 @@ def build_environment(destination: Path, updates: Dict[str, str]) -> Dict[str, s
             "NZBPO_REMOVEFILES": "Yes",
             "NZBPO_DEBUG": "Yes",
             "NZBPO_VIDEOSIZETHRESHOLDMB": "150",
-            "NZBPO_VIDEOEXTS": ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob",
+            "NZBPO_VIDEOEXTS": ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob,.mpg,.mpeg,.iso",
             "NZBPO_AUDIOSIZETHRESHOLDMB": "2",
-            "NZBPO_AUDIOEXTS": ".wav,.aiff,.mp3,.flac,.m4a,.ogg,.aac,.alac,.ape,.opus,.wma",
+            "NZBPO_AUDIOEXTS": ".mp3,.flac,.aac,.ogg,.wma,.m4a,.opus,.wav,.alac,.ape",
             "NZBPO_TESTMODE": "No",
             "NZBPO_BLOCKIMPORTDURINGTEST": "No",
             "NZBPO_RELATIVEPERCENT": "8",
@@ -79,12 +79,18 @@ def execute_case(
     updates: Dict[str, str],
     expected_code: int,
     verify,
+    expected_output: Tuple[str, ...] = (),
 ) -> bool:
     code, stdout, stderr = run_script(script, case_dir, updates)
     passed = code == expected_code
     if passed:
         try:
             verify()
+            cursor = -1
+            for marker in expected_output:
+                cursor = stdout.find(marker, cursor + 1)
+                if cursor < 0:
+                    raise AssertionError(f"missing or out-of-order output: {marker}")
         except AssertionError as exc:
             passed = False
             print(f"VERIFY FAILURE: {exc}")
@@ -272,6 +278,33 @@ def main() -> int:
             lambda: (_ for _ in ()).throw(AssertionError("disposable sample directory was not removed"))
             if delete_source.parent.exists()
             else None,
+        )
+    )
+
+    block_import_dir = root / "08-block-import-preview"
+    block_import_file = block_import_dir / "Sample" / "sample-episode.mkv"
+    block_import_file.parent.mkdir(parents=True)
+    block_import_file.write_bytes(b"x" * 1024)
+    passed.append(
+        execute_case(
+            "Block Import preserves the complete ordered Test Mode preview",
+            script,
+            block_import_dir,
+            {
+                "NZBPO_TESTMODE": "Yes",
+                "NZBPO_BLOCKIMPORTDURINGTEST": "Yes",
+            },
+            POSTPROCESS_ERROR,
+            lambda: (_ for _ in ()).throw(AssertionError("Test Mode changed the sample file"))
+            if not block_import_file.exists()
+            else None,
+            (
+                "[TEST] Would remove directory: Sample",
+                "[TEST] Would remove file: Sample/sample-episode.mkv",
+                "Summary: removed 0 files / 0 dirs",
+                "FileCandidates=1 DirCandidates=1",
+                "BlockImportDuringTest=ON with candidates → preview complete",
+            ),
         )
     )
 

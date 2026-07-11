@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Tests for RemoveSamples Extension (v1.1.0 semantics)
+# Tests for RemoveSamples Extension (v1.1.1 semantics)
 #
 # - Uses POSTPROCESS_SUCCESS (93) for runs that actually delete something
 # - Uses POSTPROCESS_NONE    (95) for runs that do no destructive work
@@ -36,11 +36,11 @@ def set_defaults(test_dir: str) -> None:
     os.environ["NZBPO_DEBUG"] = "No"
     os.environ["NZBPO_VIDEOSIZETHRESHOLDMB"] = "150"
     os.environ["NZBPO_VIDEOEXTS"] = (
-        ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob"
+        ".mkv,.mp4,.avi,.mov,.wmv,.flv,.webm,.ts,.m4v,.vob,.mpg,.mpeg,.iso"
     )
     os.environ["NZBPO_AUDIOSIZETHRESHOLDMB"] = "2"
     os.environ["NZBPO_AUDIOEXTS"] = (
-        ".wav,.aiff,.mp3,.flac,.m4a,.ogg,.aac,.alac,.ape,.opus,.wma"
+        ".mp3,.flac,.aac,.ogg,.wma,.m4a,.opus,.wav,.alac,.ape"
     )
 
     # Optional toggles default off
@@ -83,8 +83,11 @@ class TestRemoveSamples(unittest.TestCase):
         output, code, error = run_script()
         self.assertEqual(code, POSTPROCESS_NONE)
         self.assertIn("RemoveSamples extension started", output)
-        # v1.1.0 uses a summary line instead of "completed successfully"
+        # v1.1.1 uses a concise, explicit summary line.
         self.assertIn("Summary: removed 0 files / 0 dirs", output)
+        self.assertIn("FileCandidates=0 DirCandidates=0", output)
+        self.assertIn("VideoMaxMB=150", output)
+        self.assertNotIn("VideoMB>=", output)
 
     def test_missing_directory(self):
         """Missing NZBPP_DIRECTORY should be handled gracefully."""
@@ -100,6 +103,28 @@ class TestRemoveSamples(unittest.TestCase):
         output, code, error = run_script()
         self.assertEqual(code, POSTPROCESS_NONE)
         self.assertIn("skipping", output.lower())
+
+    def test_block_import_logs_preview_and_summary_before_exit(self):
+        """Block Import must preserve the complete Test Mode preview before exit 94."""
+        os.environ["NZBPO_TESTMODE"] = "Yes"
+        os.environ["NZBPO_BLOCKIMPORTDURINGTEST"] = "Yes"
+
+        sample_dir = Path(self.test_dir) / "Sample"
+        sample_dir.mkdir()
+        sample_file = sample_dir / "sample-episode.mkv"
+        sample_file.write_bytes(b"x" * 1024)
+
+        output, code, error = run_script()
+
+        self.assertEqual(code, POSTPROCESS_ERROR)
+        self.assertTrue(sample_file.exists())
+        self.assertIn("[TEST] Would remove directory: Sample", output)
+        self.assertIn("[TEST] Would remove file: Sample/sample-episode.mkv", output)
+        self.assertIn("Summary: removed 0 files / 0 dirs", output)
+        self.assertIn("FileCandidates=1 DirCandidates=1", output)
+        block_message = "BlockImportDuringTest=ON with candidates"
+        self.assertIn(block_message, output)
+        self.assertLess(output.index("Summary:"), output.index(block_message))
 
     # ---- Sample detection ----------------------------------------------
 
