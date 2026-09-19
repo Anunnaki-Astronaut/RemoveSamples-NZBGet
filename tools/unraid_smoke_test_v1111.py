@@ -2,7 +2,7 @@
 """Disposable integration checks for RemoveSamples v1.1.1 on NZBGet/Unraid.
 
 The harness only creates and alters files inside a directory named
-``_ka_removesamples_v1111_smoke``. It refuses to reuse an existing root so
+``_temp_removesamples_v1111_smoke``. It refuses to reuse an existing root so
 prior evidence cannot be overwritten accidentally.
 """
 
@@ -17,7 +17,7 @@ from typing import Dict, Tuple
 POSTPROCESS_SUCCESS = 93
 POSTPROCESS_ERROR = 94
 POSTPROCESS_NONE = 95
-ROOT_NAME = "_ka_removesamples_v1111_smoke"
+ROOT_NAME = "_temp_removesamples_v1111_smoke"
 DEFAULT_ROOT = Path("/data/usenet/complete") / ROOT_NAME
 DEFAULT_SCRIPT = Path(__file__).resolve().parents[1] / "main.py"
 

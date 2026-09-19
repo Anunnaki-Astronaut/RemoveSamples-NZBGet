@@ -119,7 +119,8 @@ class TestRemoveSamples(unittest.TestCase):
         self.assertEqual(code, POSTPROCESS_ERROR)
         self.assertTrue(sample_file.exists())
         self.assertIn("[TEST] Would remove directory: Sample", output)
-        self.assertIn("[TEST] Would remove file: Sample/sample-episode.mkv", output)
+        expected_file_log = f"[TEST] Would remove file: {Path('Sample') / 'sample-episode.mkv'}"
+        self.assertIn(expected_file_log, output)
         self.assertIn("Summary: removed 0 files / 0 dirs", output)
         self.assertIn("FileCandidates=1 DirCandidates=1", output)
         block_message = "BlockImportDuringTest=ON with candidates"
@@ -285,6 +286,113 @@ class TestRemoveSamples(unittest.TestCase):
         self.assertEqual(source_file.read_text(encoding="utf-8"), "source")
         self.assertTrue(existing_copy.exists())
         self.assertEqual(existing_copy.read_text(encoding="utf-8"), "existing")
+
+    def test_deny_pattern_does_not_select_directory(self):
+        """DenyPatterns are file-only and must not authorize whole-directory action."""
+        os.environ["NZBPO_DENYPATTERNS"] = "proof_dir"
+
+        proof_dir = Path(self.test_dir) / "proof_dir"
+        proof_dir.mkdir()
+        proof_file = proof_dir / "content.bin"
+        proof_file.write_bytes(b"content")
+
+        output, code, error = run_script()
+        self.assertEqual(code, POSTPROCESS_NONE)
+        self.assertTrue(proof_dir.exists())
+        self.assertTrue(proof_file.exists())
+
+    @unittest.skipIf(os.name == "nt", "Symlink creation may require elevated Windows privileges")
+    def test_symlinks_outside_dest_are_not_removed_or_followed(self):
+        """Symlinks pointing outside the destination root must be ignored and not unlinked/followed."""
+        os.environ["NZBPO_REMOVEFILES"] = "yes"
+        os.environ["NZBPO_REMOVEDIRECTORIES"] = "yes"
+
+        outside_dir = Path(tempfile.mkdtemp())
+        try:
+            target_file = outside_dir / "external_sample.mkv"
+            target_file.write_bytes(b"0" * (10 * 1024 * 1024))
+
+            link_file = Path(self.test_dir) / "sample.mkv"
+            link_file.symlink_to(target_file)
+
+            output, code, error = run_script()
+            self.assertEqual(code, POSTPROCESS_ERROR)
+            self.assertTrue(target_file.exists())
+            self.assertTrue(link_file.is_symlink())
+            self.assertIn("Unsafe path rejected", output)
+        finally:
+            shutil.rmtree(outside_dir, ignore_errors=True)
+
+    def test_containment_helper_rejects_root_and_outside_paths(self):
+        """The mutation containment guard accepts only existing descendants."""
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("removesamples_test_module", SCRIPT_PATH)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        root = Path(self.test_dir)
+        inside = root / "inside.bin"
+        inside.write_bytes(b"content")
+        outside_dir = Path(tempfile.mkdtemp())
+        try:
+            outside = outside_dir / "outside.bin"
+            outside.write_bytes(b"content")
+            self.assertTrue(module._is_contained_in_dest(inside, root))
+            self.assertFalse(module._is_contained_in_dest(root, root))
+            self.assertFalse(module._is_contained_in_dest(outside, root))
+        finally:
+            shutil.rmtree(outside_dir, ignore_errors=True)
+
+    @unittest.skipIf(os.name == "nt", "Symlink creation may require elevated Windows privileges")
+    def test_quarantine_retains_sample_directory_with_symlink(self):
+        """Quarantine fails closed when a sample directory contains a link."""
+        os.environ["NZBPO_QUARANTINEMODE"] = "Yes"
+        sample_dir = Path(self.test_dir) / "Sample"
+        sample_dir.mkdir()
+        outside_dir = Path(tempfile.mkdtemp())
+        try:
+            target_file = outside_dir / "external.bin"
+            target_file.write_bytes(b"external")
+            link_file = sample_dir / "linked.bin"
+            link_file.symlink_to(target_file)
+
+            output, code, error = run_script()
+            self.assertEqual(code, POSTPROCESS_ERROR)
+            self.assertTrue(sample_dir.exists())
+            self.assertTrue(link_file.is_symlink())
+            self.assertEqual(target_file.read_bytes(), b"external")
+        finally:
+            shutil.rmtree(outside_dir, ignore_errors=True)
+
+    @unittest.skipUnless(os.name == "nt", "Windows junction test")
+    def test_windows_junction_is_rejected_without_touching_target(self):
+        """A Windows junction inside a sample directory must never be traversed."""
+        sample_dir = Path(self.test_dir) / "Sample"
+        sample_dir.mkdir()
+        outside_dir = Path(tempfile.mkdtemp())
+        junction = sample_dir / "linked-folder"
+        try:
+            target_file = outside_dir / "important.bin"
+            target_file.write_bytes(b"important")
+            result = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(junction), str(outside_dir)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+
+            output, code, error = run_script()
+            self.assertEqual(code, POSTPROCESS_ERROR)
+            self.assertTrue(junction.exists())
+            self.assertEqual(target_file.read_bytes(), b"important")
+            self.assertIn("Windows reparse point", output)
+        finally:
+            if junction.exists():
+                os.rmdir(str(junction))
+            shutil.rmtree(outside_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

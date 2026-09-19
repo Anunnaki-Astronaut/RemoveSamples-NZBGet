@@ -208,11 +208,13 @@ __marimo__/
 
 .vscode/
 
-# Kilo Code (keep everything private)
-.kilocode/
-
-# Generated Graphify code-intelligence artifacts stay local to each workspace.
-/graphify-out/
-
 # Locally built release archives are uploaded as GitHub Release assets, not committed.
 /release/*.zip
+
+# Private project continuity and implementation notes; never publish.
+/SPEC.md
+/DESIGN.md
+/PLAN.md
+/TASKS.md
+/CONTEXT.md
+/AGENTS.md
