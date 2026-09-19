@@ -179,6 +179,7 @@ If your media manager monitors the same NZBGet category you used (for example, S
 * **Separator-aware:** catches `.sample.`, `_sample_`, `-sample-`, and similar separators in filenames.
 * **Size checks:** very small video/audio files under your thresholds are considered sample candidates.
 * **Relative-size checks (optional):** flags videos that are much smaller than the main video in the same download when Relative Size % is enabled.
+* **Path safety:** symbolic links and Windows junctions/reparse points are not traversed. They remain untouched, are reported as errors, and cause the run to return code 94.
 
 ---
 

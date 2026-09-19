@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.1.2
+
+### Filesystem safety
+*   **Link rejection**: Symbolic links and Windows junctions/reparse points are preserved and reported as errors instead of being traversed.
+*   **Root containment**: Paths are required to resolve inside the active NZBGet destination before move or deletion operations.
+*   **Mutation checks**: Safety checks run again immediately before quarantine moves, file deletion, directory removal, and quarantine expiration.
+*   **Fail-closed behavior**: Unsafe or uninspectable paths remain untouched, produce a visible error, and return post-processing error code 94.
+
+### Compatibility and regression coverage
+*   Added Linux symbolic-link, containment, quarantine-link, and file-only deny-pattern regressions.
+*   Added a Windows junction regression and corrected platform-specific path assertions.
+
 ## v1.1.1
 
 ### Safety fixes

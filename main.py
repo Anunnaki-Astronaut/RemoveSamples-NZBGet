@@ -26,6 +26,7 @@ before Sonarr / Radarr / Lidarr / Prowlarr see them.
 import os
 import re
 import shutil
+import stat
 import sys
 import fnmatch
 import time
@@ -72,6 +73,45 @@ def _enable_utf8_windows():
             sys.stderr.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass  # Continue silently if UTF-8 can't be forced
+
+
+def _path_safety_error(p: Path, dest=None):
+    """Return a reason when a path is unsafe for traversal or mutation."""
+    try:
+        path_stat = os.lstat(str(p))
+    except OSError as ex:
+        return f"cannot inspect path: {ex}"
+
+    if stat.S_ISLNK(path_stat.st_mode):
+        return "symbolic link"
+
+    reparse_attribute = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+    file_attributes = getattr(path_stat, "st_file_attributes", 0)
+    reparse_tag = getattr(path_stat, "st_reparse_tag", 0)
+    if (file_attributes & reparse_attribute) or reparse_tag:
+        return "Windows reparse point"
+
+    if dest is not None and not _is_contained_in_dest(p, dest):
+        return "path resolves outside the destination root"
+    return None
+
+
+def _is_safe_path(p: Path) -> bool:
+    """Return True if p is neither a symbolic link nor a reparse point."""
+    return _path_safety_error(p) is None
+
+
+def _is_contained_in_dest(p: Path, dest: Path) -> bool:
+    """Return True if p resolves strictly inside dest."""
+    try:
+        resolved_p = p.resolve(strict=True)
+        resolved_dest = dest.resolve(strict=True)
+        if resolved_p == resolved_dest:
+            return False
+        resolved_p.relative_to(resolved_dest)
+        return True
+    except (ValueError, OSError):
+        return False
 
 
 _enable_utf8_windows()
@@ -259,21 +299,40 @@ def main():
 
     all_files = []
     all_dirs = []
-    for p in DEST_DIR.rglob("*"):
-        try:
-            if p == quar_dir or quar_dir in p.parents:
-                debug(f"Skip quarantine path: {p}")
-                continue
-            if p.is_symlink():
-                debug(f"Skip symlink: {p}")
-                continue
-            if p.is_file():
-                all_files.append(p)
-            elif p.is_dir():
-                all_dirs.append(p)
-        except Exception as ex:
+    unsafe_reported = set()
+
+    def reject_unsafe(path: Path, context: str) -> bool:
+        """Report each unsafe path once and force a fail-closed exit."""
+        nonlocal errors
+        reason = _path_safety_error(path, DEST_DIR)
+        if reason is None:
+            return False
+        key = str(path)
+        if key not in unsafe_reported:
+            unsafe_reported.add(key)
             errors += 1
-            error(f"Scan error at {p}: {ex}")
+            error(f"Unsafe path rejected during {context}: {path} ({reason})")
+        return True
+
+    # Walk top-down so unsafe directories can be pruned before traversal.
+    for current, dirnames, filenames in os.walk(DEST_DIR, topdown=True, followlinks=False):
+        current_path = Path(current)
+        safe_dirnames = []
+        for name in dirnames:
+            path = current_path / name
+            if path == quar_dir:
+                debug(f"Skip quarantine path: {path}")
+                continue
+            if reject_unsafe(path, "scan"):
+                continue
+            all_dirs.append(path)
+            safe_dirnames.append(name)
+        dirnames[:] = safe_dirnames
+
+        for name in filenames:
+            path = current_path / name
+            if not reject_unsafe(path, "scan"):
+                all_files.append(path)
 
     files_considered = len(all_files)
     dirs_considered = len(all_dirs)
@@ -289,14 +348,23 @@ def main():
                 except OSError:
                     pass
 
-    def has_protected_descendant(directory: Path) -> bool:
-        """Return True when a candidate directory contains protected content."""
+    def has_protected_or_unsafe_descendant(directory: Path) -> bool:
+        """Return True when a directory contains protected or unsafe content."""
         try:
-            for child in directory.rglob("*"):
-                if child.is_symlink():
-                    continue
-                if _matches_any(DEST_DIR, child, PROTECTED_PATHS):
-                    return True
+            for current, dirnames, filenames in os.walk(directory, topdown=True, followlinks=False):
+                current_path = Path(current)
+                for name in dirnames:
+                    child = current_path / name
+                    if reject_unsafe(child, "directory inspection"):
+                        return True
+                    if _matches_any(DEST_DIR, child, PROTECTED_PATHS):
+                        return True
+                for name in filenames:
+                    child = current_path / name
+                    if reject_unsafe(child, "directory inspection"):
+                        return True
+                    if _matches_any(DEST_DIR, child, PROTECTED_PATHS):
+                        return True
         except OSError:
             # A directory we cannot inspect is not safe to remove wholesale.
             return True
@@ -306,7 +374,7 @@ def main():
     for d in all_dirs:
         try:
             if SAMPLE_NAME_RE_DIR.search(d.name):
-                if _matches_any(DEST_DIR, d, PROTECTED_PATHS) or has_protected_descendant(d):
+                if _matches_any(DEST_DIR, d, PROTECTED_PATHS) or has_protected_or_unsafe_descendant(d):
                     debug(f"Protected directory: {d}")
                 else:
                     dir_candidates.append(d)
@@ -351,7 +419,31 @@ def main():
     removed_files = 0
     removed_dirs = 0
     removed_mb_total = 0.0
+
+    def _assert_safe_mutation(path: Path):
+        reason = _path_safety_error(path, DEST_DIR)
+        if reason is not None:
+            raise ValueError(f"Unsafe mutation path: {path} ({reason})")
+
+    def _collect_safe_tree(directory: Path):
+        """Validate a tree without following links and return files and directories."""
+        _assert_safe_mutation(directory)
+        files = []
+        directories = []
+        for current, dirnames, filenames in os.walk(directory, topdown=True, followlinks=False):
+            current_path = Path(current)
+            for name in dirnames:
+                child = current_path / name
+                _assert_safe_mutation(child)
+                directories.append(child)
+            for name in filenames:
+                child = current_path / name
+                _assert_safe_mutation(child)
+                files.append(child)
+        return files, directories
+
     def _safe_move(src: Path):
+        _assert_safe_mutation(src)
         dst = quar_dir / src.resolve().relative_to(DEST_DIR)
         if dst.exists():
             raise FileExistsError(f"Quarantine destination already exists: {dst}")
@@ -362,26 +454,29 @@ def main():
     if REMOVE_DIRS:
         for d in sorted(dir_candidates, key=lambda p: len(str(p)), reverse=True):
             try:
+                _assert_safe_mutation(d)
                 rel = d.resolve().relative_to(DEST_DIR)
                 if TEST_MODE:
                     info(f"[TEST] Would remove directory: {rel}")
                 elif QUARANTINE_MODE:
                     move_failed = False
-                    for p in d.rglob("*"):
-                        if p.is_file():
-                            try:
-                                _safe_move(p)
-                            except Exception as ex:
-                                errors += 1
-                                move_failed = True
-                                error(f"Quarantine move failed {p}: {ex}")
+                    tree_files, _ = _collect_safe_tree(d)
+                    for p in tree_files:
+                        try:
+                            _safe_move(p)
+                        except Exception as ex:
+                            errors += 1
+                            move_failed = True
+                            error(f"Quarantine move failed {p}: {ex}")
                     if move_failed:
                         info(f"[QUARANTINE] Retained directory after move failure: {rel}")
                     else:
+                        _collect_safe_tree(d)
                         shutil.rmtree(d)
                         removed_dirs += 1
                         info(f"[QUARANTINE] Directory contents moved: {rel}")
                 else:
+                    _collect_safe_tree(d)
                     shutil.rmtree(d)
                     removed_dirs += 1
                     info(f"Removed directory: {rel}")
@@ -399,6 +494,7 @@ def main():
                 # Re-check existence as parent dir might be gone
                 if not f.exists():
                     continue
+                _assert_safe_mutation(f)
                 rel = f.resolve().relative_to(DEST_DIR)
                 if TEST_MODE:
                     info(f"[TEST] Would remove file: {rel} ({mb:.1f} MB)")
@@ -408,6 +504,7 @@ def main():
                     removed_mb_total += mb
                     info(f"[QUARANTINE] {rel} ({mb:.1f} MB)")
                 else:
+                    _assert_safe_mutation(f)
                     f.unlink()
                     removed_files += 1
                     removed_mb_total += mb
@@ -444,19 +541,25 @@ def main():
     ):
         cutoff = time.time() - (QUARANTINE_MAX_AGE_DAYS * 86400)
         try:
-            for p in quar_dir.rglob("*"):
+            quarantine_files, quarantine_dirs = _collect_safe_tree(quar_dir)
+            for p in quarantine_files:
                 try:
-                    if p.is_file() and p.stat().st_mtime < cutoff:
+                    _assert_safe_mutation(p)
+                    if p.stat().st_mtime < cutoff:
+                        _assert_safe_mutation(p)
                         p.unlink()
                         debug(f"Purged old quarantine file: {p.name}")
                 except Exception as ex:
+                    errors += 1
                     error(f"Quarantine purge failed at {p}: {ex}")
-            # Clean up empty subdirs
-            for sub in sorted(quar_dir.rglob("*"), key=lambda p: len(str(p)), reverse=True):
-                if sub.is_dir() and not any(sub.iterdir()):
+            for sub in sorted(quarantine_dirs, key=lambda p: len(str(p)), reverse=True):
+                _assert_safe_mutation(sub)
+                if not any(sub.iterdir()):
+                    _assert_safe_mutation(sub)
                     sub.rmdir()
-        except Exception:
-            pass
+        except Exception as ex:
+            errors += 1
+            error(f"Quarantine purge safety check failed: {ex}")
     
     if errors > 0:
         sys.exit(POSTPROCESS_ERROR)
