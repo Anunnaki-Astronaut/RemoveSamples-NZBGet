@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
 
       - name: Scan for leaked credentials
-        uses: trufflesecurity/trufflehog@f714bf454f350590f4a24c3ddb1aef02c35bf5b6 # v3.97.5
+        uses: trufflesecurity/trufflehog@ea68ca03c865c5f324e86e849ced20ed3cf9dbbb # v3.99.8
         with:
           version: 3.97.5
           extra_args: --results=verified,unknown
