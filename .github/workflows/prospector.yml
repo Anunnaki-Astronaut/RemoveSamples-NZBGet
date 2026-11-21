@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   prospector:
-    runs-on: ubuntu-latest
+    # Python 3.8 is available on Ubuntu 24.04 but not on 26.04.
+    runs-on: ubuntu-24.04
     
     steps:
     - uses: actions/checkout@v7
