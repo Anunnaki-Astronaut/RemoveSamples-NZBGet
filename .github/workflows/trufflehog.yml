@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
 
       - name: Scan for leaked credentials
-        uses: trufflesecurity/trufflehog@3bd2b5887eb0efb8fa18bfd1d296032924e4ffdc # v3.99.9
+        uses: trufflesecurity/trufflehog@4ef51f69ca6347aaa76a5e64a87eac9c0c909f71 # v3.100.1
         with:
           version: 3.99.9
           extra_args: --results=verified,unknown
